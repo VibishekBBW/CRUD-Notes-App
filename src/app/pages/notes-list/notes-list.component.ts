@@ -1,5 +1,6 @@
 import { animate, query, stagger, style, transition, trigger } from '@angular/animations';
-import { Component, OnInit } from '@angular/core';
+import { not } from '@angular/compiler/src/output/output_ast';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { Note } from 'src/app/shared/note.model';
 import { NotesService } from 'src/app/shared/notes.service';
 
@@ -73,6 +74,9 @@ import { NotesService } from 'src/app/shared/notes.service';
 export class NotesListComponent implements OnInit {
 
   notes: Note[] = new Array<Note>();
+  filteredNotes: Note[] = new Array<Note>();
+
+  @ViewChild('filterInput') filterInputElRef: ElementRef<HTMLInputElement>
 
   cardTitle: string ='abc';
 
@@ -81,11 +85,84 @@ export class NotesListComponent implements OnInit {
   ngOnInit(){
     //retrieve all notes from NotesService
     this.notes = this.notesService.getAll();
+    //this.filteredNotes = this.notesService.getAll();
+    this.filter('');
 
   }
 
-  deleteNote(id: number){
-    this.notesService.delete(id);
+  deleteNote(note: Note){
+    let noteId = this.notesService.getId(note);
+    this.notesService.delete(noteId);
+    this.filter(this.filterInputElRef.nativeElement.value);
+  }
+
+  generateNoteURL(note: Note){
+    let noteId = this.notesService.getId(note)
+    return noteId;
+  }
+
+  filter(query: string){
+    //trim entfernt Leerzeichen an beiden Enden
+    query = query.toLowerCase().trim();
+    let allResults: Note[] = new Array<Note>();
+    //Query nach Wörtern aufteilen, indem man split benutzt, welches alle Wörter mit einem Abstand dazwischen auftetilt und in den terms array speichert
+    let terms: string[] = query.split(' ');
+    terms = this.removeDuplicate(terms);
+    terms.forEach(term => {
+      let results: Note[] = this.relevantNotes(term);
+      //merge two arrays
+      allResults = [...allResults, ...results];
+    });
+    let uniqueResults = this.removeDuplicate(allResults);
+    this.filteredNotes = uniqueResults;
+
+    this.sortByRelevancy(allResults);
+  }
+
+  removeDuplicate(arr: Array<any>) : Array<any>{
+    //mit : kann man den Return Type definieren, hier ein Array
+    let uniqueResults: Set<any> = new Set<any>();
+    //Set have unique values, no duplicates
+    arr.forEach(e => uniqueResults.add(e));
+    return Array.from(uniqueResults);
+
+  }
+
+  relevantNotes(query: string) : Array<Note>{
+    query = query.toLowerCase().trim();
+    let relevantNotes = this.notes.filter(note => {
+      if(note.title && note.title.toLowerCase().includes(query)){
+        return true;
+      }
+      if(note.body && note.body.toLowerCase().includes(query)){
+        return true;
+      }
+      return false;
+    })
+
+    return relevantNotes;
+  }
+
+  sortByRelevancy(searchResults: Note[]){
+    let noteCountObj: Object = {};
+    searchResults.forEach(note => {
+      let noteId = this.notesService.getId(note);
+
+      if(noteCountObj[noteId]) {
+        noteCountObj[noteId] += 1;
+      } else {
+        noteCountObj[noteId] = 1;
+      }
+    })
+    this.filteredNotes = this.filteredNotes.sort((a: Note, b: Note) => {
+      let aId = this.notesService.getId(a);
+      let bId = this.notesService.getId(b);
+
+      let aCount = noteCountObj[aId];
+      let bCount = noteCountObj[bId];
+
+      return bCount - aCount;
+    })
   }
 
 }
